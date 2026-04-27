@@ -14,6 +14,7 @@ import retrofit2.Callback
 import retrofit2.Response
 import java.text.SimpleDateFormat
 import java.util.*
+import android.content.Intent
 
 class MainActivity : AppCompatActivity() {
 
@@ -25,6 +26,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvInfoMessage: TextView
     private lateinit var btnRefresh: View
     private lateinit var btnInspection: View
+    private lateinit var btnLogout: View
+    private lateinit var deviceTabContainer: LinearLayout
+    private var deviceList: List<DeviceResponse> = emptyList()
+    private var selectedDeviceIndex: Int = 0
+    private lateinit var tvAdminName: TextView
 
     private var token: String = ""
     private var currentDeviceId: Long = -1
@@ -55,6 +61,20 @@ class MainActivity : AppCompatActivity() {
         btnInspection.setOnClickListener {
             Snackbar.make(binContainer, "✅ 점검 완료 알림이 전송되었습니다.", Snackbar.LENGTH_SHORT).show()
         }
+
+        btnLogout = findViewById(R.id.btnLogout)
+        btnLogout.setOnClickListener {
+            token = ""
+            currentDeviceId = -1
+            val intent = Intent(this, LoginActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            startActivity(intent)
+            finish()
+        }
+        deviceTabContainer = findViewById(R.id.deviceTabContainer)
+        tvAdminName = findViewById(R.id.tvAdminName)
+        val adminName = intent.getStringExtra("admin_name") ?: "관리자"
+        tvAdminName.text = "👤 관리자: ${adminName}"
     }
 
     private fun login() {
@@ -84,9 +104,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadDevices() {
         api.getDevices(token).enqueue(object : Callback<List<DeviceResponse>> {
-            override fun onResponse(call: Call<List<DeviceResponse>>, response: Response<List<DeviceResponse>>) {
+            override fun onResponse(
+                call: Call<List<DeviceResponse>>,
+                response: Response<List<DeviceResponse>>
+            ) {
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
-                    currentDeviceId = response.body()!![0].id
+                    deviceList = response.body()!!
+                    selectedDeviceIndex = 0
+                    currentDeviceId = deviceList[0].id
+                    buildDeviceTabs()
                     loadBins()
                 } else {
                     tvServerStatus.text = "장치를 찾을 수 없습니다."
@@ -98,6 +124,41 @@ class MainActivity : AppCompatActivity() {
                 swipeRefresh.isRefreshing = false
             }
         })
+    }
+
+    private fun buildDeviceTabs() {
+        deviceTabContainer.removeAllViews()
+
+        for (i in deviceList.indices) {
+            val tab = TextView(this)
+            tab.text = "🗑️ 쓰레기통${i + 1}"
+            tab.textSize = 14f
+            tab.setPadding(40, 20, 40, 20)
+
+            if (i == selectedDeviceIndex) {
+                tab.setBackgroundResource(R.drawable.bg_tab_selected)
+                tab.setTextColor(Color.WHITE)
+            } else {
+                tab.setBackgroundResource(R.drawable.bg_tab_unselected)
+                tab.setTextColor(Color.parseColor("#64748B"))
+            }
+
+            tab.setOnClickListener {
+                selectedDeviceIndex = i
+                currentDeviceId = deviceList[i].id
+                buildDeviceTabs()
+                loadBins()
+            }
+
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            if (i > 0) params.marginStart = 8
+            tab.layoutParams = params
+
+            deviceTabContainer.addView(tab)
+        }
     }
 
     private fun loadData() {

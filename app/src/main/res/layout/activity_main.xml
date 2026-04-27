@@ -22,24 +22,56 @@
                 android:layout_height="wrap_content"
                 android:background="@color/primary_light"
                 android:padding="20dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="vertical">
 
-                <TextView
-                    android:layout_width="0dp"
+                <!-- 1줄: 타이틀 + 로그아웃 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="♻️ 쓰레기 박사단"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/black" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="♻️ 쓰레기 박사단"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/black" />
+
+                    <TextView
+                        android:id="@+id/tvConnectionIcon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📶"
+                        android:textSize="20sp"
+                        android:layout_marginEnd="12dp" />
+
+                    <TextView
+                        android:id="@+id/btnLogout"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🚪 로그아웃"
+                        android:textSize="13sp"
+                        android:textColor="#EF4444"
+                        android:textStyle="bold"
+                        android:background="@drawable/bg_logout_button"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="6dp" />
+
+                </LinearLayout>
+
+                <!-- 2줄: 관리자 정보 -->
                 <TextView
-                    android:id="@+id/tvConnectionIcon"
+                    android:id="@+id/tvAdminName"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="📶"
-                    android:textSize="20sp" />
+                    android:text="👤 관리자: -"
+                    android:textSize="13sp"
+                    android:textColor="#64748B"
+                    android:layout_marginTop="8dp" />
+
             </LinearLayout>
 
             <LinearLayout
@@ -135,6 +167,23 @@
                     android:textStyle="bold"
                     android:textColor="@color/black"
                     android:layout_marginBottom="12dp" />
+
+                <!-- 장치 전환 탭 -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none"
+                    android:layout_marginBottom="12dp">
+
+                    <LinearLayout
+                        android:id="@+id/deviceTabContainer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:background="@drawable/bg_tab_unselected"
+                        android:padding="4dp" />
+
+                </HorizontalScrollView>
 
                 <!-- 통 목록 -->
                 <LinearLayout

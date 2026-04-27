@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1A2332">
+
+    <LinearLayout
+        android:layout_width="320dp"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:background="@drawable/bg_login_card"
+        android:orientation="vertical"
+        android:padding="32dp"
+        android:gravity="center_horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="♻️"
+            android:textSize="48sp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="쓰레기 박사단"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="관리자 로그인"
+            android:textColor="#9CA3AF"
+            android:textSize="14sp"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="아이디"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/etLoginUsername"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_login_input"
+            android:hint="아이디를 입력하세요"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#9CA3AF"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:textSize="14sp"
+            android:inputType="text"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="비밀번호"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/etLoginPassword"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_login_input"
+            android:hint="비밀번호를 입력하세요"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#9CA3AF"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:textSize="14sp"
+            android:inputType="textPassword"
+            android:layout_marginBottom="24dp" />
+
+        <Button
+            android:id="@+id/btnLoginSubmit"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_login_button"
+            android:text="로그인"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvLoginError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#EF4444"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:layout_marginTop="12dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</RelativeLayout>
