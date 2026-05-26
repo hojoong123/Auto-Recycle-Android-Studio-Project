@@ -8,12 +8,18 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    // ⚠️ 에뮬레이터: 10.0.2.2 / 실제 기기: 컴퓨터 IP 주소
-    private const val BASE_URL = "http://10.0.2.2:8080/"
+    private const val BASE_URL = "http://192.168.0.116:8080/"
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val req = chain.request().newBuilder().apply {
+                TokenStore.adminId?.let { addHeader("X-Admin-Id", it.toString()) }
+                TokenStore.token?.let { addHeader("Authorization", "Bearer $it") }
+            }.build()
+            chain.proceed(req)
+        }
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         })

@@ -1,12 +1,24 @@
 package com.capstone.recyclehelper
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.*
+import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
-import androidx.cardview.widget.CardView
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.snackbar.Snackbar
 import retrofit2.Call
@@ -14,7 +26,6 @@ import retrofit2.Callback
 import retrofit2.Response
 import java.text.SimpleDateFormat
 import java.util.*
-import android.content.Intent
 
 class MainActivity : AppCompatActivity() {
 
@@ -32,16 +43,38 @@ class MainActivity : AppCompatActivity() {
     private var selectedDeviceIndex: Int = 0
     private lateinit var tvAdminName: TextView
 
-    private var token: String = ""
     private var currentDeviceId: Long = -1
     private val api = RetrofitClient.api
 
+    private val authHeader: String
+        get() = "Bearer " + (TokenStore.token ?: "")
+
+    @SuppressLint("MissingPermission")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         initViews()
-        login()
+        createNotificationChannel()
+        requestPostNotificationPermission()
+
+        // ✅ LoginActivity에서 이미 토큰 받음. 바로 장치 로드.
+        if (TokenStore.token.isNullOrEmpty()) {
+            goToLogin(); return
+        }
+        tvServerStatus.text = "✅ 서버 연결 완료"
+        tvServerStatus.setTextColor(Color.parseColor("#22C55E"))
+        loadDevices()
+
+        // ✅ STOMP 알림 구독
+        TokenStore.adminId?.let { id ->
+            StompManager.connect(id) { dto -> showSystemNotification(dto) }
+        }
+    }
+
+    override fun onDestroy() {
+        StompManager.disconnect()
+        super.onDestroy()
     }
 
     private fun initViews() {
@@ -55,59 +88,56 @@ class MainActivity : AppCompatActivity() {
         btnInspection = findViewById(R.id.btnInspection)
 
         swipeRefresh.setColorSchemeColors(Color.parseColor("#4ECCA3"))
-        swipeRefresh.setOnRefreshListener { loadData() }
+        swipeRefresh.setOnRefreshListener { loadBins() }
 
-        btnRefresh.setOnClickListener { loadData() }
-        btnInspection.setOnClickListener {
-            Snackbar.make(binContainer, "✅ 점검 완료 알림이 전송되었습니다.", Snackbar.LENGTH_SHORT).show()
-        }
+        btnRefresh.setOnClickListener { loadBins() }
+
+        // ✅ 점검 완료 → 서버에 실제로 전송
+        btnInspection.setOnClickListener { sendInspectionDone() }
 
         btnLogout = findViewById(R.id.btnLogout)
         btnLogout.setOnClickListener {
-            token = ""
+            StompManager.disconnect()
+            TokenStore.clear()
             currentDeviceId = -1
-            val intent = Intent(this, LoginActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            startActivity(intent)
-            finish()
+            goToLogin()
         }
         deviceTabContainer = findViewById(R.id.deviceTabContainer)
         tvAdminName = findViewById(R.id.tvAdminName)
         val adminName = intent.getStringExtra("admin_name") ?: "관리자"
-        tvAdminName.text = "👤 관리자: ${adminName}"
+        tvAdminName.text = "👤 관리자: $adminName"
     }
 
-    private fun login() {
-        tvServerStatus.text = "서버와 연결 중..."
+    private fun goToLogin() {
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent); finish()
+    }
 
-        api.login(LoginRequest("admin", "admin1234"))
-            .enqueue(object : Callback<LoginResponse> {
-                override fun onResponse(call: Call<LoginResponse>, response: Response<LoginResponse>) {
-                    if (response.isSuccessful && response.body() != null) {
-                        token = "Bearer " + response.body()!!.token
-                        tvServerStatus.text = "✅ 서버 연결 완료"
-                        tvServerStatus.setTextColor(Color.parseColor("#22C55E"))
-                        loadDevices()
-                    } else {
-                        tvServerStatus.text = "❌ 로그인 실패 (${response.code()})"
-                        tvServerStatus.setTextColor(Color.parseColor("#EF4444"))
-                    }
+    private fun sendInspectionDone() {
+        val req = InspectionDoneRequest(
+            floor = TokenStore.floor,
+            deviceId = if (currentDeviceId > 0) currentDeviceId else null,
+            binId = null,
+            message = "${TokenStore.floor ?: ""}층 점검 완료"
+        )
+        api.sendInspectionDone(req).enqueue(object : Callback<Void> {
+            override fun onResponse(call: Call<Void>, response: Response<Void>) {
+                if (response.isSuccessful) {
+                    Snackbar.make(binContainer, "✅ 점검 완료 알림이 전송되었습니다.", Snackbar.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "전송 실패 (${response.code()})", Toast.LENGTH_SHORT).show()
                 }
-
-                override fun onFailure(call: Call<LoginResponse>, t: Throwable) {
-                    tvServerStatus.text = "❌ 서버 연결 실패: ${t.message}"
-                    tvServerStatus.setTextColor(Color.parseColor("#EF4444"))
-                    swipeRefresh.isRefreshing = false
-                }
-            })
+            }
+            override fun onFailure(call: Call<Void>, t: Throwable) {
+                Toast.makeText(this@MainActivity, "전송 실패: ${t.message}", Toast.LENGTH_SHORT).show()
+            }
+        })
     }
 
     private fun loadDevices() {
-        api.getDevices(token).enqueue(object : Callback<List<DeviceResponse>> {
-            override fun onResponse(
-                call: Call<List<DeviceResponse>>,
-                response: Response<List<DeviceResponse>>
-            ) {
+        api.getDevices(authHeader).enqueue(object : Callback<List<DeviceResponse>> {
+            override fun onResponse(call: Call<List<DeviceResponse>>, response: Response<List<DeviceResponse>>) {
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
                     deviceList = response.body()!!
                     selectedDeviceIndex = 0
@@ -118,7 +148,6 @@ class MainActivity : AppCompatActivity() {
                     tvServerStatus.text = "장치를 찾을 수 없습니다."
                 }
             }
-
             override fun onFailure(call: Call<List<DeviceResponse>>, t: Throwable) {
                 tvServerStatus.text = "장치 조회 실패"
                 swipeRefresh.isRefreshing = false
@@ -128,13 +157,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildDeviceTabs() {
         deviceTabContainer.removeAllViews()
-
         for (i in deviceList.indices) {
             val tab = TextView(this)
             tab.text = "🗑️ 쓰레기통${i + 1}"
             tab.textSize = 14f
             tab.setPadding(40, 20, 40, 20)
-
             if (i == selectedDeviceIndex) {
                 tab.setBackgroundResource(R.drawable.bg_tab_selected)
                 tab.setTextColor(Color.WHITE)
@@ -142,47 +169,33 @@ class MainActivity : AppCompatActivity() {
                 tab.setBackgroundResource(R.drawable.bg_tab_unselected)
                 tab.setTextColor(Color.parseColor("#64748B"))
             }
-
             tab.setOnClickListener {
                 selectedDeviceIndex = i
                 currentDeviceId = deviceList[i].id
                 buildDeviceTabs()
                 loadBins()
             }
-
             val params = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
             if (i > 0) params.marginStart = 8
             tab.layoutParams = params
-
             deviceTabContainer.addView(tab)
-        }
-    }
-
-    private fun loadData() {
-        if (token.isEmpty()) {
-            login()
-        } else {
-            loadBins()
         }
     }
 
     private fun loadBins() {
         if (currentDeviceId == -1L) return
-
-        api.getBins(token, currentDeviceId).enqueue(object : Callback<List<BinResponse>> {
+        api.getBins(authHeader, currentDeviceId).enqueue(object : Callback<List<BinResponse>> {
             override fun onResponse(call: Call<List<BinResponse>>, response: Response<List<BinResponse>>) {
                 swipeRefresh.isRefreshing = false
-
                 if (response.isSuccessful && response.body() != null) {
                     displayBins(response.body()!!)
                     updateSyncTime()
                     tvSystemStatus.text = "▪ 정상"
                 }
             }
-
             override fun onFailure(call: Call<List<BinResponse>>, t: Throwable) {
                 swipeRefresh.isRefreshing = false
                 Toast.makeText(this@MainActivity, "데이터 로드 실패", Toast.LENGTH_SHORT).show()
@@ -192,12 +205,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun displayBins(bins: List<BinResponse>) {
         binContainer.removeAllViews()
-
         val warningMessages = mutableListOf<String>()
-
         for (bin in bins) {
             val view = LayoutInflater.from(this).inflate(R.layout.item_bin, binContainer, false)
-
             val tvBinIcon = view.findViewById<TextView>(R.id.tvBinIcon)
             val tvBinName = view.findViewById<TextView>(R.id.tvBinName)
             val tvSensorStatus = view.findViewById<TextView>(R.id.tvSensorStatus)
@@ -210,7 +220,6 @@ class MainActivity : AppCompatActivity() {
             val percent = bin.fillPercent ?: 0
             val hasError = bin.errorFlag ?: false
 
-            // 아이콘 & 이름
             when (typeCode) {
                 "PLASTIC" -> { tvBinIcon.text = "🥤"; tvBinName.text = "Plastic" }
                 "CAN" -> { tvBinIcon.text = "🥫"; tvBinName.text = "Cans / Metal" }
@@ -219,7 +228,6 @@ class MainActivity : AppCompatActivity() {
                 else -> { tvBinIcon.text = "📦"; tvBinName.text = typeCode }
             }
 
-            // 센서 상태
             if (hasError) {
                 tvSensorStatus.text = "센서 오류"
                 tvSensorStatus.setTextColor(Color.parseColor("#EF4444"))
@@ -228,7 +236,6 @@ class MainActivity : AppCompatActivity() {
                 tvSensorStatus.setTextColor(Color.parseColor("#94A3B8"))
             }
 
-            // 적재량 & 색상
             tvFillPercent.text = "${percent}%"
             progressBar.progress = percent
 
@@ -252,15 +259,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // 리셋 버튼
-            btnReset.setOnClickListener {
-                resetBin(bin.id)
-            }
-
+            btnReset.setOnClickListener { resetBin(bin.id) }
             binContainer.addView(view)
         }
 
-        // 안내 메시지 업데이트
         if (warningMessages.isNotEmpty()) {
             tvInfoMessage.text = "안내 메시지 : ${warningMessages.joinToString("\n")}\n빈 통 센서 확인 해주세요."
         } else {
@@ -269,7 +271,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun resetBin(binId: Long) {
-        api.resetBin(token, binId).enqueue(object : Callback<Void> {
+        api.resetBin(authHeader, binId).enqueue(object : Callback<Void> {
             override fun onResponse(call: Call<Void>, response: Response<Void>) {
                 if (response.isSuccessful) {
                     Snackbar.make(binContainer, "✅ 통이 초기화되었습니다.", Snackbar.LENGTH_SHORT).show()
@@ -278,7 +280,6 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "리셋 실패", Toast.LENGTH_SHORT).show()
                 }
             }
-
             override fun onFailure(call: Call<Void>, t: Throwable) {
                 Toast.makeText(this@MainActivity, "리셋 실패: ${t.message}", Toast.LENGTH_SHORT).show()
             }
@@ -288,5 +289,54 @@ class MainActivity : AppCompatActivity() {
     private fun updateSyncTime() {
         val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
         tvLastSync.text = "🕐 최근 동기화: ${sdf.format(Date())}"
+    }
+
+    // === 알림 채널 / 권한 / 표시 ===
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val ch = NotificationChannel(
+                "inspection_channel", "점검 알림",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+        }
+    }
+
+    private fun requestPostNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100
+            )
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    @SuppressLint("MissingPermission")
+    private fun showSystemNotification(dto: NotificationDto) {
+        // ✅ Android 13+ 권한 체크
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED) {
+            // 권한 없으면 그냥 Snackbar로 대체
+            Snackbar.make(binContainer, "🔔 ${dto.title}", Snackbar.LENGTH_LONG).show()
+            return
+        }
+
+        val intent = Intent(this, MainActivity::class.java)
+        val pi = PendingIntent.getActivity(
+            this, dto.id.toInt(), intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val noti = NotificationCompat.Builder(this, "inspection_channel")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(dto.title)
+            .setContentText(dto.message ?: "")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        NotificationManagerCompat.from(this).notify(dto.id.toInt(), noti)
     }
 }
